@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -61,8 +62,13 @@ func main() {
 		}
 		return
 	}
+	ln, e := net.Listen("tcp", addr)
+	if e != nil {
+		fmt.Fprintln(os.Stderr, e)
+		os.Exit(1)
+	}
 	go func() {
-		if e := server.ListenAndServe(); e != nil && e != http.ErrServerClosed {
+		if e := server.Serve(ln); e != nil && e != http.ErrServerClosed {
 			fmt.Fprintln(os.Stderr, e)
 		}
 	}()
@@ -78,7 +84,11 @@ func waitForSignal(server *http.Server) {
 }
 func signalNotify(ch chan<- os.Signal) { signal.Notify(ch, os.Interrupt, syscall.SIGTERM) }
 func runSelfcheck(server *http.Server, addr string) error {
-	go server.ListenAndServe()
+	ln, e := net.Listen("tcp", addr)
+	if e != nil {
+		return e
+	}
+	go server.Serve(ln)
 	client := &http.Client{Timeout: 3 * time.Second}
 	base := "http://" + addr
 	var start = time.Now()
