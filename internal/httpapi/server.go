@@ -485,12 +485,12 @@ func (s *Server) caseAction(w http.ResponseWriter, r *http.Request) {
 		if e = decode(r, &q); e == nil {
 			e = validatePublicBasics(q.Containers, q.Probes)
 			if e == nil {
-				if len(q.Containers) == 1 && len(q.Probes) == 1 {
-					workflow := application.NewWorkflow(s.app)
-					out, e = workflow.RegisterBasics(id, q.ExpectedVersion, q.Containers[0], q.Probes[0])
-				} else {
-					out, e = s.app.RegisterBasics(id, q.ExpectedVersion, q.Containers, q.Probes)
-				}
+				// Single and multi-item submissions share the same atomic
+				// batch path so a failing probe (e.g. calibration not covering
+				// the handoff window) can never leave a partially registered
+				// container behind: validation and mutation happen under one
+				// case lock and a single persisted commit.
+				out, e = s.app.RegisterBasics(id, q.ExpectedVersion, q.Containers, q.Probes)
 			}
 		}
 	case "submit":

@@ -8,13 +8,6 @@ import (
 type Workflow struct{ s *Service }
 
 func NewWorkflow(s *Service) Workflow { return Workflow{s: s} }
-func (w Workflow) RegisterBasics(id string, v int, c domain.SampleContainer, p domain.TemperatureProbe) (*domain.ColdChainCase, error) {
-	x, e := w.s.RegisterContainer(id, v, c)
-	if e != nil {
-		return nil, e
-	}
-	return w.s.RegisterProbe(id, x.Version, p)
-}
 func (w Workflow) ReviewAndRelease(id string, v int, reviewer string) (*domain.ReleaseCredential, error) {
 	x, e := w.s.Submit(id, v)
 	if e != nil {
