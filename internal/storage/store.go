@@ -90,6 +90,21 @@ func (s *Store) load() error {
 	return sc.Err()
 }
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
+
+// cloneCase returns a deep copy of a case so callers can freely mutate any
+// nested slice element (Audit, Containers, Probes, Revisions, Findings,
+// Reviews, Credential, ReviewBaseline, RemediationTasks, ConflictReviews and
+// the projections) without polluting the in-memory persisted state. A JSON
+// round-trip mirrors the persisted shape used by FindCredential and by the
+// recovery path, so the live state and the post-restart state stay aligned.
+func cloneCase(v *domain.ColdChainCase) *domain.ColdChainCase {
+	return decodeCase(mustJSON(v))
+}
+func decodeCase(b []byte) *domain.ColdChainCase {
+	var cp domain.ColdChainCase
+	_ = json.Unmarshal(b, &cp)
+	return &cp
+}
 func eventHash(e envelope) string {
 	payload := mustJSON(e.Case)
 	if e.Verification != nil {
@@ -114,16 +129,14 @@ func (s *Store) Get(id string) (*domain.ColdChainCase, error) {
 	if !ok {
 		return nil, domain.ErrNotFound
 	}
-	cp := *v
-	return &cp, nil
+	return cloneCase(v), nil
 }
 func (s *Store) List() []*domain.ColdChainCase {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]*domain.ColdChainCase, 0, len(s.cases))
 	for _, v := range s.cases {
-		cp := *v
-		out = append(out, &cp)
+		out = append(out, cloneCase(v))
 	}
 	return out
 }
@@ -132,10 +145,7 @@ func (s *Store) FindCredential(number string) (*domain.ColdChainCase, error) {
 	defer s.mu.RUnlock()
 	for _, v := range s.cases {
 		if v.Credential != nil && (v.Credential.CredentialNumber == number || v.Credential.ID == number) {
-			b := mustJSON(v)
-			var cp domain.ColdChainCase
-			_ = json.Unmarshal(b, &cp)
-			return &cp, nil
+			return cloneCase(v), nil
 		}
 	}
 	return nil, domain.ErrNotFound
@@ -177,7 +187,7 @@ func (s *Store) Save(c *domain.ColdChainCase, action string) error {
 	if err = os.Rename(tmp, snap); err != nil {
 		return err
 	}
-	s.cases[c.ID] = c
+	s.cases[c.ID] = decodeCase(b)
 	s.sequence = e.Sequence
 	s.previousHash = e.Hash
 	return nil
