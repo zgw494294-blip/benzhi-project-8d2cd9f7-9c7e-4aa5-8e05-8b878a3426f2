@@ -155,24 +155,74 @@ func (s *Store) Save(c *domain.ColdChainCase, action string) error {
 		return err
 	}
 	p := filepath.Join(s.dir, "events.jsonl")
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	before, err := s.appendEvent(p, line)
 	if err != nil {
 		return err
 	}
+	tmp := filepath.Join(s.dir, "snapshot.tmp")
+	snap := filepath.Join(s.dir, "snapshot.json")
+	if err = s.writeSnapshot(tmp, snap, b); err != nil {
+		_ = s.rollbackEvent(p, before)
+		_ = os.Remove(tmp)
+		return err
+	}
+	s.cases[c.ID] = c
+	s.sequence = e.Sequence
+	s.previousHash = e.Hash
+	return nil
+}
+
+// appendEvent 追加一行事件并 fsync 日志，返回写入前的文件偏移，用于失败回滚。
+func (s *Store) appendEvent(p string, line []byte) (int64, error) {
+	info, err := os.Stat(p)
+	var before int64
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return 0, err
+		}
+		before = 0
+	} else {
+		before = info.Size()
+	}
+	f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return 0, err
+	}
 	if _, err = f.Write(append(line, '\n')); err != nil {
 		f.Close()
-		return err
+		return 0, err
 	}
 	if err = f.Sync(); err != nil {
 		f.Close()
+		return 0, err
+	}
+	if err = f.Close(); err != nil {
+		return 0, err
+	}
+	return before, nil
+}
+
+// rollbackEvent 将事件日志截断回写入前的偏移，避免重启后重放未提交的变更。
+func (s *Store) rollbackEvent(p string, before int64) error {
+	if before < 0 {
+		before = 0
+	}
+	info, err := os.Stat(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
 	}
-	f.Close()
-	// 发布内存投影后才开始快照提交，快照失败时调用方会收到错误但状态已被观察到。
-	s.cases[c.ID] = c
-	tmp := filepath.Join(s.dir, "snapshot.tmp")
-	snap := filepath.Join(s.dir, "snapshot.json")
-	if err = os.WriteFile(tmp, b, 0644); err != nil {
+	if info.Size() <= before {
+		return nil
+	}
+	return os.Truncate(p, before)
+}
+
+// writeSnapshot 原子提交快照文件，保留快照提交作为持久化的一部分。
+func (s *Store) writeSnapshot(tmp, snap string, b []byte) error {
+	if err := os.WriteFile(tmp, b, 0644); err != nil {
 		return err
 	}
 	sf, err := os.OpenFile(tmp, os.O_WRONLY, 0644)
@@ -180,13 +230,7 @@ func (s *Store) Save(c *domain.ColdChainCase, action string) error {
 		_ = sf.Sync()
 		_ = sf.Close()
 	}
-	if err = os.Rename(tmp, snap); err != nil {
-		return err
-	}
-	s.cases[c.ID] = c
-	s.sequence = e.Sequence
-	s.previousHash = e.Hash
-	return nil
+	return os.Rename(tmp, snap)
 }
 
 func (s *Store) SaveVerification(record domain.CredentialVerificationRecord, action string) (domain.CredentialVerificationRecord, error) {
