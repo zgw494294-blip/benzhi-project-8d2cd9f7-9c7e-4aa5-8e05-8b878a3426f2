@@ -157,6 +157,15 @@ type createReq struct {
 	HandoffWindowStart, HandoffWindowEnd time.Time
 }
 
+// idempotencyScope namespaces an Idempotency-Key so that the same client
+// key only replays the exact same operation on the same resource. Without
+// scoping, a key used to create a case would later be replayed when reusing
+// the same key for an unrelated action (e.g. container registration),
+// returning the cached create response and skipping the real work.
+func idempotencyScope(parts ...string) string {
+	return strings.Join(parts, ":")
+}
+
 func (s *Server) cases(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "GET" {
 		f, e := parseFilter(r.URL.Query())
@@ -176,7 +185,11 @@ func (s *Server) cases(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(405)
 		return
 	}
-	key := r.Header.Get("Idempotency-Key")
+	rawKey := r.Header.Get("Idempotency-Key")
+	key := ""
+	if rawKey != "" {
+		key = idempotencyScope("cases", "create", rawKey)
+	}
 	if key != "" {
 		if code, cached, ok := s.app.ReplayResult(key); ok {
 			write(w, code, cached)
@@ -225,7 +238,11 @@ func (s *Server) caseAction(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	key := r.Header.Get("Idempotency-Key")
+	rawKey := r.Header.Get("Idempotency-Key")
+	key := ""
+	if rawKey != "" {
+		key = idempotencyScope("cases", id, action, rawKey)
+	}
 	if key != "" {
 		if code, cached, ok := s.app.ReplayResult(key); ok {
 			write(w, code, cached)
