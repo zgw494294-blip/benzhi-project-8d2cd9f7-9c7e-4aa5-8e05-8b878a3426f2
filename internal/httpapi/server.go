@@ -622,7 +622,7 @@ func (s *Server) verify(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		record, err := s.app.RecordCredentialReview(q.Input, q.BatchKey, q.CheckDigest, q.Operator, q.Conclusion, q.Note)
+		record, err := s.app.RecordCredentialReviewContext(r.Context(), q.Input, q.BatchKey, q.CheckDigest, q.Operator, q.Conclusion, q.Note)
 		if err != nil {
 			write(w, status(err), errorBody(err))
 			return

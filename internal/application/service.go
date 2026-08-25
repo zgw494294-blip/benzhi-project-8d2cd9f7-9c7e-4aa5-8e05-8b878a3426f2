@@ -3,6 +3,7 @@ package application
 import (
 	"coldchain/internal/domain"
 	"coldchain/internal/storage"
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -571,6 +572,20 @@ func (s *Service) RecordCredentialReview(input, batchKey, checkDigest, operator,
 	}
 	var err error
 	if record, err = s.store.SaveVerification(record, "credential-review"); err != nil {
+		return domain.CredentialVerificationRecord{}, err
+	}
+	return record, nil
+}
+
+func (s *Service) RecordCredentialReviewContext(ctx context.Context, input, batchKey, checkDigest, operator, conclusion, note string) (domain.CredentialVerificationRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return domain.CredentialVerificationRecord{}, err
+	}
+	record, err := s.RecordCredentialReview(input, batchKey, checkDigest, operator, conclusion, note)
+	if err != nil {
+		return domain.CredentialVerificationRecord{}, err
+	}
+	if err = ctx.Err(); err != nil {
 		return domain.CredentialVerificationRecord{}, err
 	}
 	return record, nil
