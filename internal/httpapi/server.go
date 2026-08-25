@@ -485,7 +485,12 @@ func (s *Server) caseAction(w http.ResponseWriter, r *http.Request) {
 		if e = decode(r, &q); e == nil {
 			e = validatePublicBasics(q.Containers, q.Probes)
 			if e == nil {
-				out, e = s.app.RegisterBasics(id, q.ExpectedVersion, q.Containers, q.Probes)
+				if len(q.Containers) == 1 && len(q.Probes) == 1 {
+					workflow := application.NewWorkflow(s.app)
+					out, e = workflow.RegisterBasics(id, q.ExpectedVersion, q.Containers[0], q.Probes[0])
+				} else {
+					out, e = s.app.RegisterBasics(id, q.ExpectedVersion, q.Containers, q.Probes)
+				}
 			}
 		}
 	case "submit":
