@@ -2,13 +2,32 @@ package risk
 
 import "coldchain/internal/domain"
 import "sort"
+import "sync"
 
 // Engine 保持风险计算入口独立，便于审核和复算共用同一规则。
-type Engine struct{}
+type engineState struct {
+	mu    sync.RWMutex
+	cache map[string][]domain.RiskFinding
+}
 
-func New() Engine { return Engine{} }
-func (Engine) Evaluate(c *domain.ColdChainCase) []domain.RiskFinding {
-	return domain.FindingsForCase(c)
+type Engine struct{ state *engineState }
+
+func New() Engine { return Engine{state: &engineState{cache: make(map[string][]domain.RiskFinding)}} }
+func (e Engine) Evaluate(c *domain.ColdChainCase) []domain.RiskFinding {
+	if e.state == nil {
+		return domain.FindingsForCase(c)
+	}
+	e.state.mu.RLock()
+	cached, ok := e.state.cache[c.ID]
+	e.state.mu.RUnlock()
+	if ok {
+		return append([]domain.RiskFinding(nil), cached...)
+	}
+	findings := domain.FindingsForCase(c)
+	e.state.mu.Lock()
+	e.state.cache[c.ID] = append([]domain.RiskFinding(nil), findings...)
+	e.state.mu.Unlock()
+	return findings
 }
 
 type FindingSummary struct {

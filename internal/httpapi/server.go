@@ -21,12 +21,13 @@ import (
 var assets embed.FS
 
 type Server struct {
-	app *application.Service
-	mux *http.ServeMux
+	app  *application.Service
+	risk risk.Engine
+	mux  *http.ServeMux
 }
 
 func New(app *application.Service) *Server {
-	s := &Server{app: app, mux: http.NewServeMux()}
+	s := &Server{app: app, risk: risk.New(), mux: http.NewServeMux()}
 	s.routes()
 	return s
 }
@@ -287,7 +288,7 @@ func (s *Server) caseAction(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			derived := *c
-			derived.Findings = domain.FindingsForCase(c)
+			derived.Findings = s.risk.Evaluate(c)
 			for i := range derived.Findings {
 				for _, previous := range c.Findings {
 					if previous.ID == derived.Findings[i].ID && previous.Severity == derived.Findings[i].Severity && previous.DerivedReason == derived.Findings[i].DerivedReason && strings.Join(previous.EvidenceRefs, ",") == strings.Join(derived.Findings[i].EvidenceRefs, ",") {
