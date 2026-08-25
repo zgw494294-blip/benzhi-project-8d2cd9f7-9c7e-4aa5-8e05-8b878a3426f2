@@ -12,14 +12,23 @@ import (
 )
 
 type Service struct {
-	store        *storage.Store
-	locks        sync.Map
-	createMu     sync.Mutex
-	idemCreateMu sync.Mutex
-	credentialMu sync.Mutex
+	store         *storage.Store
+	locks         sync.Map
+	createMu      sync.Mutex
+	idemCreateMu  sync.Mutex
+	credentialMu  sync.Mutex
+	manifestCache map[string]manifestCacheEntry
 }
 
-func New(store *storage.Store) *Service { return &Service{store: store} }
+type manifestCacheEntry struct {
+	version int
+	entries []string
+	digest  string
+}
+
+func New(store *storage.Store) *Service {
+	return &Service{store: store, manifestCache: make(map[string]manifestCacheEntry)}
+}
 func (s *Service) lock(id string) *sync.Mutex {
 	v, _ := s.locks.LoadOrStore(id, &sync.Mutex{})
 	return v.(*sync.Mutex)
@@ -656,8 +665,16 @@ func (s *Service) Manifest(id string) ([]string, string, error) {
 	if c.Status != domain.StatusApproved && c.Status != domain.StatusReleased {
 		return nil, "", domain.ErrInvalidState
 	}
+	if cached, ok := s.manifestCache[id]; ok && cached.version == c.Version {
+		return append([]string(nil), cached.entries...), cached.digest, nil
+	}
 	entries, d := c.ManifestPreview()
-	return entries, d, nil
+	s.manifestCache[id] = manifestCacheEntry{
+		version: c.Version,
+		entries: append([]string(nil), entries...),
+		digest:  d,
+	}
+	return append([]string(nil), entries...), d, nil
 }
 func (s *Service) Audit(id string, action string) ([]domain.AuditEvent, error) {
 	c, e := s.Get(id)
