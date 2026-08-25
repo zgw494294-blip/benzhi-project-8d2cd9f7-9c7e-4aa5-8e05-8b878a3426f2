@@ -114,9 +114,7 @@ func (s *Store) Get(id string) (*domain.ColdChainCase, error) {
 	if !ok {
 		return nil, domain.ErrNotFound
 	}
-	b := mustJSON(v)
-	var cp domain.ColdChainCase
-	_ = json.Unmarshal(b, &cp)
+	cp := *v
 	return &cp, nil
 }
 func (s *Store) List() []*domain.ColdChainCase {
@@ -124,9 +122,7 @@ func (s *Store) List() []*domain.ColdChainCase {
 	defer s.mu.RUnlock()
 	out := make([]*domain.ColdChainCase, 0, len(s.cases))
 	for _, v := range s.cases {
-		b := mustJSON(v)
-		var cp domain.ColdChainCase
-		_ = json.Unmarshal(b, &cp)
+		cp := *v
 		out = append(out, &cp)
 	}
 	return out
