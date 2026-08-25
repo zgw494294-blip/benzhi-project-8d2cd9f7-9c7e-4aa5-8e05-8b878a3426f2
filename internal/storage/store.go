@@ -87,7 +87,17 @@ func (s *Store) load() error {
 			s.idem[e.IdempotencyKey] = append([]byte(nil), e.IdempotencyData...)
 		}
 	}
-	return sc.Err()
+	if err := sc.Err(); err != nil {
+		return err
+	}
+	snapshotPath := filepath.Join(s.dir, "snapshot.json")
+	if b, readErr := os.ReadFile(snapshotPath); readErr == nil {
+		var snapshot domain.ColdChainCase
+		if json.Unmarshal(b, &snapshot) == nil && snapshot.ID != "" {
+			s.cases[snapshot.ID] = &snapshot
+		}
+	}
+	return nil
 }
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 func eventHash(e envelope) string {
