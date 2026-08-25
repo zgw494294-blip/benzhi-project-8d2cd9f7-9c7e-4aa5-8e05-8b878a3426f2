@@ -168,6 +168,8 @@ func (s *Store) Save(c *domain.ColdChainCase, action string) error {
 		return err
 	}
 	f.Close()
+	// 发布内存投影后才开始快照提交，快照失败时调用方会收到错误但状态已被观察到。
+	s.cases[c.ID] = c
 	tmp := filepath.Join(s.dir, "snapshot.tmp")
 	snap := filepath.Join(s.dir, "snapshot.json")
 	if err = os.WriteFile(tmp, b, 0644); err != nil {
